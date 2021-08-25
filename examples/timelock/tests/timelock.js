@@ -9,6 +9,7 @@ describe('timelock', () => {
   // Timelock account
   const timelockAccount = anchor.web3.Keypair.generate();
   const timelockProgram = anchor.workspace.Timelock;
+  const timelockDelay = 10
 
   // Puppet account
   const puppetAccount = anchor.web3.Keypair.generate();
@@ -17,10 +18,20 @@ describe('timelock', () => {
 
   const transactionAccount = anchor.web3.Keypair.generate();
 
-  it.only('Can create a timelock', async () => {
-    const delay = new anchor.BN(10)
+  let timelockProgramSigner
 
-    const tx = await timelockProgram.rpc.initialize(delay, {
+  beforeEach(async () => {
+    [
+      timelockProgramSigner
+    ] = await anchor.web3.PublicKey.findProgramAddress(
+      [timelockAccount.publicKey.toBuffer()],
+      timelockProgram.programId
+    );
+
+  })
+
+  it('Can create a timelock', async () => {
+    const tx = await timelockProgram.rpc.initialize(new anchor.BN(timelockDelay), {
       accounts: {
         timelock: timelockAccount.publicKey,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -35,20 +46,14 @@ describe('timelock', () => {
     const timelockData = await timelockProgram.account.timelock.fetch(
       timelockAccount.publicKey
     )
-    assert.deepEqual(timelockData.delay, delay);
+    assert.deepEqual(timelockData.delay, new anchor.BN(timelockDelay));
   });
 
-  it.only('Can queue a transaction', async () => {
+  it('Can queue a transaction', async () => {
     const data = puppetProgram.coder.instruction.encode('initialize', {
       puppet: puppetAccount.publicKey
     });
 
-    const [
-      timelockProgramSigner
-    ] = await anchor.web3.PublicKey.findProgramAddress(
-      [timelockAccount.publicKey.toBuffer()],
-      timelockProgram.programId
-    );
     const accounts = [
       {
         pubkey: timelockAccount.publicKey,
@@ -96,14 +101,7 @@ describe('timelock', () => {
     assert.equal(accountData.didExecute, false);
   })
 
-  it.only('Cannot execute a transaction if delay has not elapsed', async () => {
-    const [
-      timelockProgramSigner
-    ] = await anchor.web3.PublicKey.findProgramAddress(
-      [timelockAccount.publicKey.toBuffer()],
-      timelockProgram.programId
-    );
-
+  it('Cannot execute a transaction if delay has not elapsed', async () => {
     try {
       await timelockProgram.rpc.executeTransaction({
         accounts: {
@@ -117,5 +115,16 @@ describe('timelock', () => {
     }
   })
 
-  it('Can execute a transaction if delay has elapsed')
+  it('Can execute a transaction if delay has elapsed', async () => {
+    // Make sure delay has elapsed
+    await new Promise(resolve => setTimeout(resolve, timelockDelay * 1000));
+
+    await timelockProgram.rpc.executeTransaction({
+      accounts: {
+        timelock: timelockAccount.publicKey,
+        timelockSigner: timelockProgramSigner,
+        transaction: transactionAccount.publicKey,
+      }
+    });
+  })
 });

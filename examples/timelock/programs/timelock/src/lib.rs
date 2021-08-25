@@ -64,7 +64,6 @@ pub mod timelock {
         ];
         let signer = &[&seeds[..]];
         let accounts = ctx.remaining_accounts;
-        println!("Hi");
 
         solana_program::program::invoke_signed(&ix, &accounts, signer)?;
 

@@ -14,14 +14,12 @@ use std::convert::Into;
 pub mod timelock {
     use super::*;
 
-    pub fn create_timelock(
-        ctx: Context<CreateTimelock>,
+    pub fn initialize(
+        ctx: Context<Initialize>,
         delay: i64,
-        nonce: u8
     ) -> ProgramResult {
         let timelock = &mut ctx.accounts.timelock;
         timelock.delay = delay;
-        timelock.nonce = nonce;
         Ok(())
     }
 
@@ -66,6 +64,7 @@ pub mod timelock {
         ];
         let signer = &[&seeds[..]];
         let accounts = ctx.remaining_accounts;
+        println!("Hi");
 
         solana_program::program::invoke_signed(&ix, &accounts, signer)?;
 
@@ -78,7 +77,7 @@ pub mod timelock {
 }
 
 #[derive(Accounts)]
-pub struct CreateTimelock<'info> {
+pub struct Initialize<'info> {
     #[account(init)]
     timelock: ProgramAccount<'info, Timelock>,
     rent: Sysvar<'info, Rent>,
@@ -95,10 +94,6 @@ pub struct QueueTransaction<'info> {
 #[derive(Accounts)]
 pub struct ExecuteTransaction<'info> {
     timelock: ProgramAccount<'info, Timelock>,
-    #[account(seeds = [
-        timelock.to_account_info().key.as_ref(),
-        &[timelock.nonce],
-    ])]
     timelock_signer: AccountInfo<'info>,
     transaction: ProgramAccount<'info, Transaction>,
 }

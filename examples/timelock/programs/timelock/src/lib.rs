@@ -14,12 +14,10 @@ use std::convert::Into;
 pub mod timelock {
     use super::*;
 
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        delay: i64,
-    ) -> ProgramResult {
+    pub fn initialize(ctx: Context<Initialize>, delay: i64, nonce: u8) -> ProgramResult {
         let timelock = &mut ctx.accounts.timelock;
         timelock.delay = delay;
+        timelock.nonce = nonce;
         Ok(())
     }
 
@@ -27,12 +25,12 @@ pub mod timelock {
         ctx: Context<QueueTransaction>,
         pid: Pubkey,
         accs: Vec<TransactionAccount>,
-        data: Vec<u8>
+        data: Vec<u8>,
     ) -> ProgramResult {
-        let tx = &mut ctx.accounts.transaction;
         let timelock = &ctx.accounts.timelock;
         let clock = Clock::get().unwrap();
 
+        let tx = &mut ctx.accounts.transaction;
         tx.program_id = pid;
         tx.data = data;
         tx.executable_at = clock.unix_timestamp + timelock.delay;
@@ -43,28 +41,44 @@ pub mod timelock {
     }
 
     // Executes the given transaction if time has elapsed.
-    pub fn execute_transaction(
-        ctx: Context<ExecuteTransaction>
-    ) -> ProgramResult {
+    pub fn execute_transaction(ctx: Context<ExecuteTransaction>) -> ProgramResult {
         // Has this been executed already?
         if ctx.accounts.transaction.did_execute {
             return Err(ErrorCode::AlreadyExecuted.into());
         }
-
         // Has sufficient time elapsed?
         let clock = Clock::get().unwrap();
         if ctx.accounts.transaction.executable_at > clock.unix_timestamp {
             return Err(ErrorCode::NotDelayElapsed.into());
         }
 
-        let ix: Instruction = (&*ctx.accounts.transaction).into();
+        let mut ix: Instruction = (&*ctx.accounts.transaction).into();
+        // Change the timelock signer account to read only
+        ix.accounts = ix
+            .accounts
+            .iter()
+            .map(|acc| {
+                if &acc.pubkey == ctx.accounts.timelock_signer.key {
+                    AccountMeta::new_readonly(acc.pubkey, true)
+                } else {
+                    acc.clone()
+                }
+            })
+            .collect();
+
+        // msg!("{:?}", ix.accounts);
+        // msg!("{:?}", ctx.accounts.timelock.to_account_info());
+
         let seeds = &[
             ctx.accounts.timelock.to_account_info().key.as_ref(),
             &[ctx.accounts.timelock.nonce],
         ];
         let signer = &[&seeds[..]];
+
         let accounts = ctx.remaining_accounts;
 
+        // The program ID of the instruction being issued must be included in
+        // &accounts?
         solana_program::program::invoke_signed(&ix, &accounts, signer)?;
 
         // Burn the transaction to ensure one time use.
@@ -72,7 +86,6 @@ pub mod timelock {
 
         Ok(())
     }
-
 }
 
 #[derive(Accounts)]
@@ -93,14 +106,19 @@ pub struct QueueTransaction<'info> {
 #[derive(Accounts)]
 pub struct ExecuteTransaction<'info> {
     timelock: ProgramAccount<'info, Timelock>,
+    #[account(seeds = [
+        timelock.to_account_info().key.as_ref(),
+        &[timelock.nonce],
+    ])]
     timelock_signer: AccountInfo<'info>,
+    #[account(mut)]
     transaction: ProgramAccount<'info, Transaction>,
 }
 
 #[account]
 pub struct Timelock {
     delay: i64,
-    nonce: u8
+    nonce: u8,
 }
 
 #[account]

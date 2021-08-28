@@ -1,130 +1,185 @@
-const anchor = require('@project-serum/anchor');
+const anchor = require("@project-serum/anchor");
 const assert = require("assert");
 
-describe('timelock', () => {
-
+describe("timelock", async () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
 
   // Timelock account
-  const timelockAccount = anchor.web3.Keypair.generate();
-  const timelockProgram = anchor.workspace.Timelock;
-  const timelockDelay = 10
+  const timelock = anchor.web3.Keypair.generate();
+  const program = anchor.workspace.Timelock;
+  const timelockDelay = 5;
 
   // Puppet account
-  const puppetAccount = anchor.web3.Keypair.generate();
+  const puppet = anchor.web3.Keypair.generate();
   // Puppet program to test execution of transaction
   const puppetProgram = anchor.workspace.Puppet;
-
   const transactionAccount = anchor.web3.Keypair.generate();
 
-  let timelockProgramSigner
+  let timelockSigner;
+  let nonce;
 
   beforeEach(async () => {
-    [
-      timelockProgramSigner
-    ] = await anchor.web3.PublicKey.findProgramAddress(
-      [timelockAccount.publicKey.toBuffer()],
-      timelockProgram.programId
+    [timelockSigner, nonce] = await anchor.web3.PublicKey.findProgramAddress(
+      [timelock.publicKey.toBuffer()],
+      program.programId
+    );
+  });
+
+  it("Can create a timelock", async () => {
+    const tx = await program.rpc.initialize(
+      new anchor.BN(timelockDelay),
+      nonce,
+      {
+        accounts: {
+          timelock: timelock.publicKey,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        instructions: [
+          // Create the timelock prior to running initialize
+          await program.account.timelock.createInstruction(timelock),
+        ],
+        signers: [timelock],
+      }
     );
 
-  })
-
-  it('Can create a timelock', async () => {
-    const tx = await timelockProgram.rpc.initialize(new anchor.BN(timelockDelay), {
-      accounts: {
-        timelock: timelockAccount.publicKey,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      },
-      instructions: [
-        // Create the timelockAccount prior to running initialize
-        await timelockProgram.account.timelock.createInstruction(timelockAccount),
-      ],
-      signers: [timelockAccount],
-    });
-
-    const timelockData = await timelockProgram.account.timelock.fetch(
-      timelockAccount.publicKey
-    )
+    const timelockData = await program.account.timelock.fetch(
+      timelock.publicKey
+    );
     assert.deepEqual(timelockData.delay, new anchor.BN(timelockDelay));
   });
 
-  it('Can queue a transaction', async () => {
-    const data = puppetProgram.coder.instruction.encode('initialize', {
-      puppet: puppetAccount.publicKey
+  it("Can queue a transaction", async () => {
+    // Initialize the puppet program
+    await puppetProgram.rpc.initialize({
+      accounts: {
+        puppet: puppet.publicKey,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      },
+      instructions: [
+        await puppetProgram.account.puppet.createInstruction(puppet),
+      ],
+      signers: [puppet],
     });
+
+    const data = puppetProgram.coder.instruction.encode(
+      "set_data",
+      new anchor.BN(5),
+      {
+        puppet: puppet.publicKey,
+      }
+    );
 
     const accounts = [
       {
-        pubkey: timelockAccount.publicKey,
-        isWritable: true,
+        pubkey: timelock.publicKey,
+        isWritable: false,
         isSigner: false,
       },
       {
-        pubkey: timelockProgramSigner,
+        pubkey: timelockSigner,
         isWritable: false,
         isSigner: true,
       },
     ];
 
-    const tx = await timelockProgram.rpc.queueTransaction(
+    const txSize = 1000; // Why is this necessary?
+    const tx = await program.rpc.queueTransaction(
       puppetProgram.programId,
       accounts,
       data,
       {
         accounts: {
-          timelock: timelockAccount.publicKey,
+          timelock: timelock.publicKey,
           transaction: transactionAccount.publicKey,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
         instructions: [
-          await timelockProgram.account.transaction.createInstruction(
+          await program.account.transaction.createInstruction(
             transactionAccount,
-            1000 // Sets the space for the account? Why necessary?
+            txSize
           ),
         ],
         signers: [transactionAccount],
       }
     );
 
-    const accountData = await timelockProgram.account.transaction.fetch(
+    const txAccount = await program.account.transaction.fetch(
       transactionAccount.publicKey
     );
-    assert.ok(accountData.programId.equals(puppetProgram.programId));
-    assert.deepEqual(accountData.data, data);
+    assert.ok(txAccount.programId.equals(puppetProgram.programId));
+    assert.deepEqual(txAccount.accounts, accounts);
+    assert.deepEqual(txAccount.data, data);
     /*
     assert.deepEqual(
-      accountData.executableAt,
+      txAccount.executableAt,
       new anchor.BN(((Date.now() / 1000) + 10))
     )
     */
-    assert.equal(accountData.didExecute, false);
-  })
+    assert.equal(txAccount.didExecute, false);
+  });
 
-  it('Cannot execute a transaction if delay has not elapsed', async () => {
+  it("Cannot execute a transaction if delay has not elapsed", async () => {
     try {
-      await timelockProgram.rpc.executeTransaction({
+      await program.rpc.executeTransaction({
         accounts: {
-          timelock: timelockAccount.publicKey,
-          timelockSigner: timelockProgramSigner,
+          timelock: timelock.publicKey,
+          timelockSigner,
           transaction: transactionAccount.publicKey,
-        }
+        },
       });
     } catch (error) {
-      assert.equal(error.msg, "Timelock delay has not elapsed.")
+      assert.equal(error.msg, "Timelock delay has not elapsed.");
     }
-  })
+  });
 
-  it('Can execute a transaction if delay has elapsed', async () => {
+  it("Can execute a transaction if delay has elapsed", async () => {
     // Make sure delay has elapsed
-    await new Promise(resolve => setTimeout(resolve, timelockDelay * 1000));
+    await new Promise((resolve) =>
+      setTimeout(resolve, (timelockDelay + 1) * 1000)
+    );
 
-    await timelockProgram.rpc.executeTransaction({
+    console.log("Timelock Program Signer", timelockSigner.toString());
+    console.log("Timelock Program Account", timelock.publicKey.toString());
+    console.log("Transaction Account", transactionAccount.publicKey.toString());
+    console.log("Timelock", program.programId.toString());
+    console.log("Puppet", puppetProgram.programId.toString());
+
+    console.log();
+
+    await program.rpc.executeTransaction({
       accounts: {
-        timelock: timelockAccount.publicKey,
-        timelockSigner: timelockProgramSigner,
+        timelock: timelock.publicKey,
+        timelockSigner,
         transaction: transactionAccount.publicKey,
-      }
+      },
+      remainingAccounts: puppetProgram.instruction.setData
+        .accounts({
+          puppet: puppet.publicKey,
+          timelockSigner,
+        })
+        .map((meta) =>
+          meta.pubkey.equals(timelockSigner)
+            ? { ...meta, isSigner: false }
+            : meta
+        )
+        .concat(
+          {
+            pubkey: puppetProgram.programId,
+            isWritable: false,
+            isSigner: false,
+          },
+          {
+            pubkey: timelock.publicKey,
+            isWritable: false,
+            isSigner: false,
+          },
+          {
+            pubkey: timelockSigner,
+            isWritable: false,
+            isSigner: false,
+          }
+        ),
     });
-  })
+  });
 });

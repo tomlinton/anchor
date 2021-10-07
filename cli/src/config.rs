@@ -124,6 +124,8 @@ impl WithPath<Config> {
             if members.is_empty() {
                 let path = self.path().parent().unwrap().join("programs");
                 fs::read_dir(path)?
+                    // Filter out non directories
+                    .filter(|file| file.as_ref().unwrap().metadata().unwrap().is_dir())
                     .map(|dir| dir.map(|d| d.path().canonicalize().unwrap()))
                     .collect::<Vec<Result<PathBuf, std::io::Error>>>()
                     .into_iter()
@@ -133,7 +135,7 @@ impl WithPath<Config> {
             }
         };
 
-        // Filter out everything part of the exclude array.
+        // Filter out everything that is part of the exclude array.
         Ok(program_paths
             .into_iter()
             .filter(|m| !exclude.contains(m))

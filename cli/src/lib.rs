@@ -528,13 +528,13 @@ pub fn build(
     let cargo = Manifest::discover()?;
 
     fs::create_dir_all(cfg_parent.join("target/idl"))?;
-    fs::create_dir_all(cfg_parent.join("target/types"))?;
+    fs::create_dir_all(cfg_parent.join(&cfg.workspace.types))?;
 
     let idl_out = match idl {
         Some(idl) => Some(PathBuf::from(idl)),
         None => Some(cfg_parent.join("target/idl")),
     };
-    let idl_ts_out = Some(cfg_parent.join("target/types"));
+    let idl_ts_out = Some(cfg_parent.join(&cfg.workspace.types));
 
     let solana_version = match solana_version.is_some() {
         true => solana_version,
@@ -657,7 +657,7 @@ fn build_cwd_verifiable(
     let workspace_dir = cfg.path().parent().unwrap().canonicalize()?;
     fs::create_dir_all(workspace_dir.join("target/verifiable"))?;
     fs::create_dir_all(workspace_dir.join("target/idl"))?;
-    fs::create_dir_all(workspace_dir.join("target/types"))?;
+    fs::create_dir_all(workspace_dir.join(&cfg.workspace.types))?;
 
     let container_name = "anchor-program";
 
@@ -712,7 +712,7 @@ fn build_cwd_verifiable(
 
         // Write out the TypeScript type.
         println!("Writing the .ts file");
-        let ts_file = workspace_dir.join(format!("target/types/{}.ts", idl.name));
+        let ts_file = workspace_dir.join(format!("{}/{}.ts", cfg.workspace.types, idl.name));
         fs::write(&ts_file, template::idl_ts(&idl)?)?;
     }
     println!("Build success");

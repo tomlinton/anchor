@@ -258,23 +258,13 @@ pub type ScriptsConfig = BTreeMap<String, String>;
 
 pub type ProgramsConfig = BTreeMap<Cluster, BTreeMap<String, ProgramDeployment>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub members: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude: Vec<String>,
-    pub types: String,
-}
-
-impl Default for WorkspaceConfig {
-    fn default() -> Self {
-        Self {
-            members: Default::default(),
-            exclude: Default::default(),
-            types: "target/types".to_string(),
-        }
-    }
+    pub types: Option<String>,
 }
 
 impl Config {

@@ -90,16 +90,19 @@ pub mod timelock {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init)]
+    #[account(init, payer = authority)]
     timelock: ProgramAccount<'info, Timelock>,
+    #[account(signer)]
+    authority: AccountInfo<'info>,
     rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct QueueTransaction<'info> {
     timelock: ProgramAccount<'info, Timelock>,
-    #[account(init)]
+    #[account(init, payer = authority)]
     transaction: ProgramAccount<'info, Transaction>,
+    authority: AccountInfo<'info>,
     rent: Sysvar<'info, Rent>,
 }
 

@@ -1,7 +1,15 @@
 use crate::config::ProgramWorkspace;
 use crate::VERSION;
+use anchor_syn::idl::Idl;
 use anyhow::Result;
-use heck::{CamelCase, SnakeCase};
+use heck::{CamelCase, MixedCase, SnakeCase};
+use solana_sdk::pubkey::Pubkey;
+
+pub fn default_program_id() -> Pubkey {
+    "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+        .parse()
+        .unwrap()
+}
 
 pub fn virtual_manifest() -> &'static str {
     r#"[workspace]
@@ -18,6 +26,30 @@ token = "{}"
 "#,
         token
     )
+}
+
+pub fn idl_ts(idl: &Idl) -> Result<String> {
+    let mut idl = idl.clone();
+    idl.accounts = idl
+        .accounts
+        .into_iter()
+        .map(|acc| {
+            let mut acc = acc;
+            acc.name = acc.name.to_mixed_case();
+            acc
+        })
+        .collect();
+    let idl_json = serde_json::to_string_pretty(&idl)?;
+    Ok(format!(
+        r#"export type {} = {};
+
+export const IDL: {} = {};
+"#,
+        idl.name.to_camel_case(),
+        idl_json,
+        idl.name.to_camel_case(),
+        idl_json
+    ))
 }
 
 pub fn cargo_toml(name: &str) -> String {
@@ -77,8 +109,7 @@ main();
 
 pub fn deploy_ts_script_host(cluster_url: &str, script_path: &str) -> String {
     format!(
-        r#"
-import * as anchor from '@project-serum/anchor';
+        r#"import * as anchor from '@project-serum/anchor';
 
 // Deploy script defined by the user.
 const userScript = require("{0}");
@@ -104,8 +135,7 @@ main();
 }
 
 pub fn deploy_script() -> &'static str {
-    r#"
-// Migrations are an early feature. Currently, they're nothing more than this
+    r#"// Migrations are an early feature. Currently, they're nothing more than this
 // single deploy script that's invoked from the CLI, injecting a provider
 // configured from the workspace's Anchor.toml.
 
@@ -121,8 +151,7 @@ module.exports = async function (provider) {
 }
 
 pub fn ts_deploy_script() -> &'static str {
-    r#"
-// Migrations are an early feature. Currently, they're nothing more than this
+    r#"// Migrations are an early feature. Currently, they're nothing more than this
 // single deploy script that's invoked from the CLI, injecting a provider
 // configured from the workspace's Anchor.toml.
 
@@ -147,6 +176,8 @@ pub fn lib_rs(name: &str) -> String {
     format!(
         r#"use anchor_lang::prelude::*;
 
+declare_id!("{}");
+
 #[program]
 pub mod {} {{
     use super::*;
@@ -158,6 +189,7 @@ pub mod {} {{
 #[derive(Accounts)]
 pub struct Initialize {{}}
 "#,
+        default_program_id(),
         name.to_snake_case(),
     )
 }
@@ -194,7 +226,7 @@ pub fn package_json() -> String {
         "chai": "^4.3.4",
         "mocha": "^9.0.3"
     }}
-}}      
+}}
 "#,
         VERSION
     )
@@ -213,7 +245,7 @@ pub fn ts_package_json() -> String {
         "@types/mocha": "^9.0.0",
         "typescript": "^4.3.5"
     }}
-}}     
+}}
 "#,
         VERSION
     )
@@ -222,21 +254,27 @@ pub fn ts_package_json() -> String {
 pub fn ts_mocha(name: &str) -> String {
     format!(
         r#"import * as anchor from '@project-serum/anchor';
+import {{ Program }} from '@project-serum/anchor';
+import {{ {} }} from '../target/types/{}';
 
 describe('{}', () => {{
 
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
 
+  const program = anchor.workspace.{} as Program<{}>;
+
   it('Is initialized!', async () => {{
     // Add your test here.
-    const program = anchor.workspace.{};
-    const tx = await program.rpc.initialize();
+    const tx = await program.rpc.initialize({{}});
     console.log("Your transaction signature", tx);
   }});
 }});
 "#,
+        name.to_camel_case(),
+        name.to_snake_case(),
         name,
+        name.to_camel_case(),
         name.to_camel_case(),
     )
 }
@@ -261,6 +299,7 @@ pub fn git_ignore() -> &'static str {
 .DS_Store
 target
 **/*.rs.bk
+node_modules
 "#
 }
 
@@ -274,15 +313,18 @@ pub fn node_shell(
 const anchor = require('@project-serum/anchor');
 const web3 = anchor.web3;
 const PublicKey = anchor.web3.PublicKey;
+const Keypair = anchor.web3.Keypair;
 
 const __wallet = new anchor.Wallet(
-  Buffer.from(
-    JSON.parse(
-      require('fs').readFileSync(
-        "{}",
-        {{
-          encoding: "utf-8",
-        }},
+  Keypair.fromSecretKey(
+    Buffer.from(
+      JSON.parse(
+        require('fs').readFileSync(
+          "{}",
+          {{
+            encoding: "utf-8",
+          }},
+        ),
       ),
     ),
   ),

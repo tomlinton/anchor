@@ -21,7 +21,6 @@ SUBCOMMANDS:
     help       Prints this message or the help of the given subcommand(s)
     idl        Commands for interacting with interface definitions
     init       Initializes a workspace
-    launch     Deploys, initializes an IDL, and migrates all in one command
     migrate    Runs the deploy migration script
     new        Creates a new program
     test       Runs integration tests against a localnetwork
@@ -37,7 +36,7 @@ SUBCOMMANDS:
 anchor init
 ```
 
-Initializes a project workspace wit the following structure.
+Initializes a project workspace with the following structure.
 
 * `Anchor.toml`: Anchor configuration file.
 * `Cargo.toml`: Rust workspace configuration file.
@@ -115,7 +114,7 @@ anchor migrate
 ```
 
 Runs the deploy script located at `migrations/deploy.js`, injecting a provider configured
-form the workspace's `Anchor.toml`. For example,
+from the workspace's `Anchor.toml`. For example,
 
 ```javascript
 // File: migrations/deploys.js
@@ -137,7 +136,7 @@ and only support this simple deploy script at the moment.
 The `idl` subcommand provides commands for interacting with interface definition files.
 It's recommended to use these commands to store an IDL on chain, at a deterministic
 address, as a function of nothing but the the program's ID. This
-allow us to generate clients for a program using nothing but the program ID.
+allows us to generate clients for a program using nothing but the program ID.
 
 ### Idl Init
 
@@ -195,23 +194,6 @@ anchor idl set-authority -n <new-authority> -p <program-id>
 Sets a new authority on the IDL account. Both the `new-authority` and `program-id`
 must be encoded in base 58.
 
-## Launch
-
-```
-anchor launch
-```
-
-Builds, deploys and migrates, all in one command. This is particularly
-useful when simultaneously developing an app against a Localnet or Devnet. For mainnet, it's
-recommended to run each command separately, since transactions can sometimes be
-unreliable depending on the Solana RPC node being used.
-
-```
-anchor launch --verifiable
-```
-
-Runs the build inside a docker image so that the output binary is deterministic (assuming a Cargo.lock file is used).
-    
 ## New
 
 ```
@@ -246,4 +228,4 @@ anchor verify <program-id>
 ```
 
 Verifies the on-chain bytecode matches the locally compiled artifact.
-    
+

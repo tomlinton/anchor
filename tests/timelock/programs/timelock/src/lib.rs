@@ -9,6 +9,9 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program;
 use anchor_lang::solana_program::instruction::Instruction;
 use std::convert::Into;
+use std::mem::size_of;
+
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod timelock {
@@ -90,38 +93,42 @@ pub mod timelock {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = authority)]
-    timelock: ProgramAccount<'info, Timelock>,
+    #[account(init, payer = authority, space = 8 + 8 + 1 + 1)]
+    pub timelock: ProgramAccount<'info, Timelock>,
     #[account(signer)]
-    authority: AccountInfo<'info>,
-    rent: Sysvar<'info, Rent>,
+    pub authority: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct QueueTransaction<'info> {
     timelock: ProgramAccount<'info, Timelock>,
-    #[account(init, payer = authority)]
-    transaction: ProgramAccount<'info, Transaction>,
-    authority: AccountInfo<'info>,
-    rent: Sysvar<'info, Rent>,
+    #[account(init, payer = authority, space = 8 + size_of::<Transaction>())]
+    pub transaction: ProgramAccount<'info, Transaction>,
+    pub system_program: Program<'info, System>,
+    pub authority: AccountInfo<'info>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct ExecuteTransaction<'info> {
-    timelock: ProgramAccount<'info, Timelock>,
+    pub timelock: ProgramAccount<'info, Timelock>,
     #[account(seeds = [
         timelock.to_account_info().key.as_ref(),
         &[timelock.nonce],
-    ])]
-    timelock_signer: AccountInfo<'info>,
+    ],         bump = timelock.bump,
+)]
+    pub timelock_signer: AccountInfo<'info>,
     #[account(mut)]
-    transaction: ProgramAccount<'info, Transaction>,
+    pub transaction: ProgramAccount<'info, Transaction>,
 }
 
 #[account]
 pub struct Timelock {
     delay: i64,
     nonce: u8,
+    bump: u8,
 }
 
 #[account]

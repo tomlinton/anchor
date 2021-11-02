@@ -5,6 +5,7 @@ describe("timelock", async () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
 
+  const authority = anchor.web3.Keypair.geneate();
   // Timelock account
   const timelock = anchor.web3.Keypair.generate();
   const program = anchor.workspace.Timelock;
@@ -33,6 +34,7 @@ describe("timelock", async () => {
       {
         accounts: {
           timelock: timelock.publicKey,
+          authority: authority.publicKey,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
         instructions: [

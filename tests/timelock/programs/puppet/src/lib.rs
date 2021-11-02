@@ -1,8 +1,11 @@
 use anchor_lang::prelude::*;
 
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+
 #[program]
 pub mod puppet {
     use super::*;
+
     pub fn initialize(_ctx: Context<Initialize>) -> ProgramResult {
         Ok(())
     }
@@ -16,8 +19,11 @@ pub mod puppet {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init)]
+    #[account(init, payer = authority, space = 8 + 8)]
     pub puppet: ProgramAccount<'info, Puppet>,
+    #[account(signer)]
+    pub authority: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 

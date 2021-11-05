@@ -3,7 +3,8 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-timelock = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+timelock = "3uTE1CEth2KcSPRCq8q78b4NM7d6KBBjvHswb8DE8aDH"
+puppet = "1fziJ3JkZwVhjBMPzBcBjGXk8MUMcdd7WGMpeaxhBdf"
 
 [scripts]
 test = "mocha -t 1000000 tests/"

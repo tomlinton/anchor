@@ -9,9 +9,8 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program;
 use anchor_lang::solana_program::instruction::Instruction;
 use std::convert::Into;
-use std::mem::size_of;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("3uTE1CEth2KcSPRCq8q78b4NM7d6KBBjvHswb8DE8aDH");
 
 #[program]
 pub mod timelock {
@@ -69,9 +68,6 @@ pub mod timelock {
             })
             .collect();
 
-        // msg!("{:?}", ix.accounts);
-        // msg!("{:?}", ctx.accounts.timelock.to_account_info());
-
         let seeds = &[
             ctx.accounts.timelock.to_account_info().key.as_ref(),
             &[ctx.accounts.timelock.nonce],
@@ -79,13 +75,11 @@ pub mod timelock {
         let signer = &[&seeds[..]];
 
         let accounts = ctx.remaining_accounts;
-
-        // The program ID of the instruction being issued must be included in
-        // &accounts?
         solana_program::program::invoke_signed(&ix, &accounts, signer)?;
 
         // Burn the transaction to ensure one time use.
-        ctx.accounts.transaction.did_execute = true;
+        let transaction = &mut ctx.accounts.transaction;
+        transaction.did_execute = true;
 
         Ok(())
     }
@@ -93,18 +87,16 @@ pub mod timelock {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = authority, space = 8 + 8 + 1 + 1)]
+    #[account(init, payer = authority, space = 8 + 8 + 8)]
     pub timelock: ProgramAccount<'info, Timelock>,
-    #[account(signer)]
-    pub authority: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct QueueTransaction<'info> {
     timelock: ProgramAccount<'info, Timelock>,
-    #[account(init, payer = authority, space = 8 + size_of::<Transaction>())]
+    #[account(init, payer = authority, space = 1000)]
     pub transaction: ProgramAccount<'info, Transaction>,
     pub system_program: Program<'info, System>,
     pub authority: AccountInfo<'info>,
@@ -114,11 +106,7 @@ pub struct QueueTransaction<'info> {
 #[derive(Accounts)]
 pub struct ExecuteTransaction<'info> {
     pub timelock: ProgramAccount<'info, Timelock>,
-    #[account(seeds = [
-        timelock.to_account_info().key.as_ref(),
-        &[timelock.nonce],
-    ],         bump = timelock.bump,
-)]
+    #[account(seeds = [timelock.key().as_ref()], bump = timelock.nonce)]
     pub timelock_signer: AccountInfo<'info>,
     #[account(mut)]
     pub transaction: ProgramAccount<'info, Transaction>,
@@ -175,6 +163,6 @@ impl From<TransactionAccount> for AccountMeta {
 pub enum ErrorCode {
     #[msg("Timelock delay has not elapsed.")]
     NotDelayElapsed,
-    #[msg("The given transaction has already been executed.")]
+    #[msg("Transaction has already been executed.")]
     AlreadyExecuted,
 }

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("1fziJ3JkZwVhjBMPzBcBjGXk8MUMcdd7WGMpeaxhBdf");
 
 #[program]
 pub mod puppet {
@@ -19,21 +19,20 @@ pub mod puppet {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = authority, space = 8 + 8)]
-    pub puppet: ProgramAccount<'info, Puppet>,
-    #[account(signer)]
-    pub authority: AccountInfo<'info>,
+    #[account(init, payer = user, space = 8 + 8)]
+    pub puppet: Account<'info, Data>,
+    #[account(mut)]
+    pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct SetData<'info> {
     #[account(mut)]
-    pub puppet: ProgramAccount<'info, Puppet>,
+    pub puppet: Account<'info, Data>,
 }
 
 #[account]
-pub struct Puppet {
+pub struct Data {
     pub data: u64,
 }

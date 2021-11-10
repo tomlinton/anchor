@@ -21,9 +21,9 @@ _defaults: &defaults
 _tests: &tests
   before_install:
   - nvm install $NODE_VERSION
-  - cd ts && yarn && yarn build && yarn link && cd ../
-  - cd examples/tutorial && yarn && yarn link @project-serum/anchor && cd ../../
-  - cd tests && yarn && yarn link @project-serum/anchor && cd ..
+  - cd ts && yarn && yarn build && cd ../
+  - cd examples/tutorial && npm install && npm link ../../ts -ws && cd ../../
+  - cd tests && npm install && npm link ../ts -ws && cd ..
   - sudo apt-get install -y pkg-config build-essential libudev-dev
   - sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
   - export PATH="/home/travis/.local/share/solana/install/active_release/bin:$PATH"
@@ -39,9 +39,9 @@ jobs:
         - cargo fmt -- --check
         - cargo clippy --all-targets -- -D warnings
         - cargo test
-        - pushd ts && yarn && popd
-        - pushd ts && yarn test && popd
-        - pushd ts && yarn lint && popd
+        - pushd ts && npm install && popd
+        - pushd ts && npm test && popd
+        - pushd ts && npm run lint && popd
     - <<: *tests
       name: Runs the e2e tests 1
       script:
@@ -72,4 +72,4 @@ jobs:
         - pushd tests/escrow && anchor test && popd
         - pushd tests/pyth && anchor test && popd
         - pushd tests/system-accounts && anchor test && popd
-        - pushd examples/tutorial && yarn workspaces run test
+        - pushd examples/tutorial && npm test --workspaces

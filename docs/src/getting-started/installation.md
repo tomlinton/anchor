@@ -21,14 +21,6 @@ See the solana [docs](https://docs.solana.com/cli/install-solana-cli-tools) for 
 sh -c "$(curl -sSfL https://release.solana.com/v1.8.0/install)"
 ```
 
-## Install Yarn
-
-[Yarn](https://yarnpkg.com/) is recommended for JavaScript package management.
-
-```bash
-npm install -g yarn
-```
-
 ## Install Anchor
 
 ### Install using pre-build binary on x86_64 Linux

@@ -229,16 +229,29 @@ export class NodeWallet implements Wallet {
   constructor(readonly payer: Keypair) {}
 
   static local(): NodeWallet {
-    const process = require("process");
-    const payer = Keypair.fromSecretKey(
-      Buffer.from(
-        JSON.parse(
-          require("fs").readFileSync(process.env.ANCHOR_WALLET, {
-            encoding: "utf-8",
-          })
-        )
-      )
-    );
+    const os = require("os");
+
+    let jsonWalletContents;
+    try {
+      jsonWalletContents = JSON.parse(
+        require("fs").readFileSync(process.env.ANCHOR_WALLET, {
+          encoding: "utf-8",
+        })
+      );
+    } catch (error) {
+      if (process.env.ANCHOR_WALLET === undefined) {
+        throw new Error(
+          "Invalid wallet, set the ANCHOR_WALLET environment variable to a valid file."
+        );
+      } else if (error.code === "ENOENT") {
+        throw new Error(
+          `Invalid wallet, couldn't parse contents of ${process.env.ANCHOR_WALLET}`
+        );
+      }
+      throw error;
+    }
+
+    const payer = Keypair.fromSecretKey(Buffer.from(jsonWalletContents));
     return new NodeWallet(payer);
   }
 

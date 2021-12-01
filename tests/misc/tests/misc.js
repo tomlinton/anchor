@@ -854,4 +854,8 @@ describe("misc", () => {
     );
     assert.deepStrictEqual(dataAccount.data, array2d);
   });
+
+  it("Should include the program version in the IDL", () => {
+    assert.equal(miscIdl.version, "0.1.0")
+  })
 });

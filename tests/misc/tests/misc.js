@@ -855,7 +855,14 @@ describe("misc", () => {
     assert.deepStrictEqual(dataAccount.data, array2d);
   });
 
-  it("Should include the program version in the IDL", () => {
+  it("Should include the program version in the IDL during build", () => {
     assert.equal(miscIdl.version, "0.1.0")
+  })
+
+  it("Should include the program version in IDL parse", () => {
+    const { spawnSync } = require("child_process")
+    const result = spawnSync("anchor", ["idl", "parse", "--file", "programs/misc/src/lib.rs"])
+    const idl = JSON.parse(result.stdout.toString())
+    assert.equal(idl.version, "0.1.0")
   })
 });

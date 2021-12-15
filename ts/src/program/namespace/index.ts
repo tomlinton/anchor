@@ -9,6 +9,7 @@ import TransactionFactory, { TransactionNamespace } from "./transaction.js";
 import RpcFactory, { RpcNamespace } from "./rpc.js";
 import AccountFactory, { AccountNamespace } from "./account.js";
 import SimulateFactory, { SimulateNamespace } from "./simulate.js";
+import ConstantFactory, { ConstantNamespace } from "./constant.js";
 import { parseIdlErrors } from "../common.js";
 import { AllInstructions } from "./types.js";
 
@@ -19,6 +20,7 @@ export { TransactionNamespace, TransactionFn } from "./transaction.js";
 export { RpcNamespace, RpcFn } from "./rpc.js";
 export { AccountNamespace, AccountClient, ProgramAccount } from "./account.js";
 export { SimulateNamespace, SimulateFn } from "./simulate.js";
+export { ConstantNamespace } from "./constant.js";
 export { IdlAccounts, IdlTypes } from "./types.js";
 
 export default class NamespaceFactory {
@@ -36,7 +38,8 @@ export default class NamespaceFactory {
     TransactionNamespace<IDL>,
     AccountNamespace<IDL>,
     SimulateNamespace<IDL>,
-    StateClient<IDL> | undefined
+    StateClient<IDL> | undefined,
+    ConstantNamespace
   ] {
     const rpc: RpcNamespace = {};
     const instruction: InstructionNamespace = {};
@@ -45,6 +48,7 @@ export default class NamespaceFactory {
 
     const idlErrors = parseIdlErrors(idl);
 
+    const constants = ConstantFactory.build(idl, coder);
     const state = StateFactory.build(idl, coder, programId, provider);
 
     idl.instructions.forEach(<I extends AllInstructions<IDL>>(idlIx: I) => {
@@ -84,6 +88,7 @@ export default class NamespaceFactory {
       account,
       simulate as SimulateNamespace<IDL>,
       state,
+      constants as ConstantNamespace,
     ];
   }
 }

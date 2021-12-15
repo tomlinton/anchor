@@ -10,6 +10,7 @@ import NamespaceFactory, {
   AccountNamespace,
   StateClient,
   SimulateNamespace,
+  ConstantNamespace,
 } from "./namespace/index.js";
 import { getProvider } from "../index.js";
 import { utf8 } from "../utils/bytes/index.js";
@@ -201,6 +202,22 @@ export class Program<IDL extends Idl = Idl> {
   readonly simulate: SimulateNamespace<IDL>;
 
   /**
+   * The namespace provides functions to decode the constants of a program.
+   *
+   * ```javascript
+   * program.constant.<constant-name>
+   * ```
+   *
+   * To decode the `increment` method above,
+   *
+   * ```javascript
+   *  TODO
+   * });
+   * ```
+   */
+  readonly constants: ConstantNamespace;
+
+  /**
    * A client for the program state. Similar to the base [[Program]] client,
    * one can use this to send transactions and read accounts for the state
    * abstraction.
@@ -272,6 +289,7 @@ export class Program<IDL extends Idl = Idl> {
       account,
       simulate,
       state,
+      constants,
     ] = NamespaceFactory.build(idl, this._coder, programId, provider);
     this.rpc = rpc;
     this.instruction = instruction;
@@ -279,6 +297,7 @@ export class Program<IDL extends Idl = Idl> {
     this.account = account;
     this.simulate = simulate;
     this.state = state;
+    this.constants = constants;
   }
 
   /**

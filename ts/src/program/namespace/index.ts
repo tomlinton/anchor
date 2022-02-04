@@ -1,8 +1,8 @@
 import camelCase from "camelcase";
 import { PublicKey } from "@solana/web3.js";
-import Coder from "../../coder/index.js";
+import { Coder } from "../../coder/index.js";
 import Provider from "../../provider.js";
-import { Idl, IdlInstruction } from "../../idl.js";
+import { Idl } from "../../idl.js";
 import StateFactory, { StateClient } from "./state.js";
 import InstructionFactory, { InstructionNamespace } from "./instruction.js";
 import TransactionFactory, { TransactionNamespace } from "./transaction.js";
@@ -12,6 +12,7 @@ import SimulateFactory, { SimulateNamespace } from "./simulate.js";
 import ConstantFactory, { ConstantNamespace } from "./constant.js";
 import { parseIdlErrors } from "../common.js";
 import { AllInstructions } from "./types.js";
+import { MethodsBuilderFactory, MethodsNamespace } from "./methods";
 
 // Re-exports.
 export { StateClient } from "./state.js";
@@ -22,6 +23,7 @@ export { AccountNamespace, AccountClient, ProgramAccount } from "./account.js";
 export { SimulateNamespace, SimulateFn } from "./simulate.js";
 export { ConstantNamespace } from "./constant.js";
 export { IdlAccounts, IdlTypes } from "./types.js";
+export { MethodsBuilderFactory, MethodsNamespace } from "./methods";
 
 export default class NamespaceFactory {
   /**
@@ -38,17 +40,24 @@ export default class NamespaceFactory {
     TransactionNamespace<IDL>,
     AccountNamespace<IDL>,
     SimulateNamespace<IDL>,
-    StateClient<IDL> | undefined,
-    ConstantNamespace
+    ConstantNamespace,
+    MethodsNamespace<IDL>,
+    StateClient<IDL> | undefined
   ] {
     const rpc: RpcNamespace = {};
     const instruction: InstructionNamespace = {};
     const transaction: TransactionNamespace = {};
     const simulate: SimulateNamespace = {};
+    const methods: MethodsNamespace = {};
 
     const idlErrors = parseIdlErrors(idl);
 
     const constants = ConstantFactory.build(idl, coder);
+
+    const account: AccountNamespace<IDL> = idl.accounts
+      ? AccountFactory.build(idl, coder, programId, provider)
+      : ({} as AccountNamespace<IDL>);
+
     const state = StateFactory.build(idl, coder, programId, provider);
 
     idl.instructions.forEach(<I extends AllInstructions<IDL>>(idlIx: I) => {
@@ -68,6 +77,16 @@ export default class NamespaceFactory {
         programId,
         idl
       );
+      const methodItem = MethodsBuilderFactory.build(
+        provider,
+        programId,
+        idlIx,
+        ixItem,
+        txItem,
+        rpcItem,
+        simulateItem,
+        account
+      );
 
       const name = camelCase(idlIx.name);
 
@@ -75,11 +94,8 @@ export default class NamespaceFactory {
       transaction[name] = txItem;
       rpc[name] = rpcItem;
       simulate[name] = simulateItem;
+      methods[name] = methodItem;
     });
-
-    const account: AccountNamespace<IDL> = idl.accounts
-      ? AccountFactory.build(idl, coder, programId, provider)
-      : ({} as AccountNamespace<IDL>);
 
     return [
       rpc as RpcNamespace<IDL>,
@@ -87,6 +103,7 @@ export default class NamespaceFactory {
       transaction as TransactionNamespace<IDL>,
       account,
       simulate as SimulateNamespace<IDL>,
+      methods as MethodsNamespace<IDL>,
       state,
       constants as ConstantNamespace,
     ];

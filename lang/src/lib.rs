@@ -29,58 +29,23 @@ use solana_program::entrypoint::ProgramResult;
 use solana_program::instruction::AccountMeta;
 use solana_program::program_error::ProgramError;
 use solana_program::pubkey::Pubkey;
+use std::collections::BTreeMap;
 use std::io::Write;
 
-mod account;
-mod account_info;
 mod account_meta;
-mod boxed;
+pub mod accounts;
+mod bpf_upgradeable_state;
 mod common;
-mod context;
-mod cpi_account;
-mod cpi_state;
+pub mod context;
 mod ctor;
-mod error;
+pub mod error;
 #[doc(hidden)]
 pub mod idl;
-mod loader;
-mod loader_account;
-mod program;
-mod program_account;
-mod signer;
-pub mod state;
-mod system_account;
 mod system_program;
-mod sysvar;
-mod unchecked_account;
-mod vec;
 
-pub use crate::account::Account;
-#[doc(hidden)]
-#[allow(deprecated)]
-pub use crate::context::CpiStateContext;
-pub use crate::context::{Context, CpiContext};
-#[doc(hidden)]
-#[allow(deprecated)]
-pub use crate::cpi_account::CpiAccount;
-#[doc(hidden)]
-#[allow(deprecated)]
-pub use crate::cpi_state::CpiState;
-#[allow(deprecated)]
-pub use crate::loader::Loader;
-pub use crate::loader_account::AccountLoader;
-pub use crate::program::Program;
-#[doc(hidden)]
-#[allow(deprecated)]
-pub use crate::program_account::ProgramAccount;
-pub use crate::signer::Signer;
-#[doc(hidden)]
-#[allow(deprecated)]
-pub use crate::state::ProgramState;
-pub use crate::system_account::SystemAccount;
 pub use crate::system_program::System;
-pub use crate::sysvar::Sysvar;
-pub use crate::unchecked_account::UncheckedAccount;
+mod vec;
+pub use crate::bpf_upgradeable_state::*;
 pub use anchor_attribute_access_control::access_control;
 pub use anchor_attribute_account::{account, declare_id, zero_copy};
 pub use anchor_attribute_constant::constant;
@@ -116,6 +81,7 @@ pub trait Accounts<'info>: ToAccountMetas + ToAccountInfos<'info> + Sized {
         program_id: &Pubkey,
         accounts: &mut &[AccountInfo<'info>],
         ix_data: &[u8],
+        bumps: &mut BTreeMap<String, u8>,
     ) -> Result<Self, ProgramError>;
 }
 
@@ -123,7 +89,10 @@ pub trait Accounts<'info>: ToAccountMetas + ToAccountInfos<'info> + Sized {
 /// should be done here.
 pub trait AccountsExit<'info>: ToAccountMetas + ToAccountInfos<'info> {
     /// `program_id` is the currently executing program.
-    fn exit(&self, program_id: &Pubkey) -> ProgramResult;
+    fn exit(&self, _program_id: &Pubkey) -> ProgramResult {
+        // no-op
+        Ok(())
+    }
 }
 
 /// The close procedure to initiate garabage collection of an account, allowing
@@ -156,6 +125,15 @@ pub trait ToAccountInfo<'info> {
     fn to_account_info(&self) -> AccountInfo<'info>;
 }
 
+impl<'info, T> ToAccountInfo<'info> for T
+where
+    T: AsRef<AccountInfo<'info>>,
+{
+    fn to_account_info(&self) -> AccountInfo<'info> {
+        self.as_ref().clone()
+    }
+}
+
 /// A data structure that can be serialized and stored into account storage,
 /// i.e. an
 /// [`AccountInfo`](../solana_program/account_info/struct.AccountInfo.html#structfield.data)'s
@@ -169,7 +147,9 @@ pub trait ToAccountInfo<'info> {
 /// [`#[account]`](./attr.account.html) attribute.
 pub trait AccountSerialize {
     /// Serializes the account data into `writer`.
-    fn try_serialize<W: Write>(&self, writer: &mut W) -> Result<(), ProgramError>;
+    fn try_serialize<W: Write>(&self, _writer: &mut W) -> Result<(), ProgramError> {
+        Ok(())
+    }
 }
 
 /// A data structure that can be deserialized and stored into account storage,
@@ -181,10 +161,12 @@ pub trait AccountDeserialize: Sized {
     /// uninitialized accounts, where the bytes are zeroed. Implementations
     /// should be unique to a particular account type so that one can never
     /// successfully deserialize the data of one account type into another.
-    /// For example, if the SPL token program where to implement this trait,
-    /// it should impossible to deserialize a `Mint` account into a token
+    /// For example, if the SPL token program were to implement this trait,
+    /// it should be impossible to deserialize a `Mint` account into a token
     /// `Account`.
-    fn try_deserialize(buf: &mut &[u8]) -> Result<Self, ProgramError>;
+    fn try_deserialize(buf: &mut &[u8]) -> Result<Self, ProgramError> {
+        Self::try_deserialize_unchecked(buf)
+    }
 
     /// Deserializes account data without checking the account discriminator.
     /// This should only be used on account initialization, when the bytes of
@@ -241,9 +223,12 @@ pub trait Key {
     fn key(&self) -> Pubkey;
 }
 
-impl Key for Pubkey {
+impl<'info, T> Key for T
+where
+    T: AsRef<AccountInfo<'info>>,
+{
     fn key(&self) -> Pubkey {
-        *self
+        *self.as_ref().key
     }
 }
 
@@ -251,15 +236,16 @@ impl Key for Pubkey {
 /// All programs should include it via `anchor_lang::prelude::*;`.
 pub mod prelude {
     pub use super::{
-        access_control, account, constant, declare_id, emit, error, event, interface, program,
-        require, state, zero_copy, Account, AccountDeserialize, AccountLoader, AccountSerialize,
-        Accounts, AccountsExit, AnchorDeserialize, AnchorSerialize, Context, CpiContext, Id, Key,
-        Owner, Program, Signer, System, SystemAccount, Sysvar, ToAccountInfo, ToAccountInfos,
-        ToAccountMetas, UncheckedAccount,
+        access_control, account, accounts::account::Account,
+        accounts::account_loader::AccountLoader, accounts::program::Program,
+        accounts::signer::Signer, accounts::system_account::SystemAccount,
+        accounts::sysvar::Sysvar, accounts::unchecked_account::UncheckedAccount, constant,
+        context::Context, context::CpiContext, declare_id, emit, error, event, interface, program,
+        require, solana_program::bpf_loader_upgradeable::UpgradeableLoaderState, state, zero_copy,
+        AccountDeserialize, AccountSerialize, Accounts, AccountsExit, AnchorDeserialize,
+        AnchorSerialize, Id, Key, Owner, ProgramData, System, ToAccountInfo, ToAccountInfos,
+        ToAccountMetas,
     };
-
-    #[allow(deprecated)]
-    pub use super::{CpiAccount, CpiState, CpiStateContext, Loader, ProgramAccount, ProgramState};
 
     pub use borsh;
     pub use solana_program::account_info::{next_account_info, AccountInfo};
@@ -282,25 +268,38 @@ pub mod prelude {
     pub use thiserror;
 }
 
-// Internal module used by macros and unstable apis.
+/// Internal module used by macros and unstable apis.
 #[doc(hidden)]
 pub mod __private {
-    use solana_program::program_error::ProgramError;
-    use solana_program::pubkey::Pubkey;
+    // Modules with useful information for users
+    // don't use #[doc(hidden)] on these
+    pub use crate::error::ErrorCode;
+
+    /// The discriminator anchor uses to mark an account as closed.
+    pub const CLOSED_ACCOUNT_DISCRIMINATOR: [u8; 8] = [255, 255, 255, 255, 255, 255, 255, 255];
+
+    /// The starting point for user defined error codes.
+    pub const ERROR_CODE_OFFSET: u32 = 6000;
 
     pub use crate::ctor::Ctor;
-    pub use crate::error::{Error, ErrorCode};
+
+    pub use crate::error::Error;
+
     pub use anchor_attribute_account::ZeroCopyAccessor;
+
     pub use anchor_attribute_event::EventIndex;
+
     pub use base64;
+
     pub use bytemuck;
 
-    pub mod state {
-        pub use crate::state::*;
-    }
+    use solana_program::program_error::ProgramError;
 
-    // The starting point for user defined error codes.
-    pub const ERROR_CODE_OFFSET: u32 = 300;
+    use solana_program::pubkey::Pubkey;
+
+    pub mod state {
+        pub use crate::accounts::state::*;
+    }
 
     // Calculates the size of an account, which may be larger than the deserialized
     // data in it. This trait is currently only used for `#[state]` accounts.
@@ -310,11 +309,13 @@ pub mod __private {
     }
 
     // Very experimental trait.
+    #[doc(hidden)]
     pub trait ZeroCopyAccessor<Ty> {
         fn get(&self) -> Ty;
         fn set(input: &Ty) -> Self;
     }
 
+    #[doc(hidden)]
     impl ZeroCopyAccessor<Pubkey> for [u8; 32] {
         fn get(&self) -> Pubkey {
             Pubkey::new(self)
@@ -324,32 +325,43 @@ pub mod __private {
         }
     }
 
-    pub use crate::state::PROGRAM_STATE_SEED;
-    pub const CLOSED_ACCOUNT_DISCRIMINATOR: [u8; 8] = [255, 255, 255, 255, 255, 255, 255, 255];
+    #[doc(hidden)]
+    pub use crate::accounts::state::PROGRAM_STATE_SEED;
 }
 
 /// Ensures a condition is true, otherwise returns the given error.
 /// Use this with a custom error type.
 ///
 /// # Example
-///
-/// After defining an `ErrorCode`
-///
 /// ```ignore
+/// // Instruction function
+/// pub fn set_data(ctx: Context<SetData>, data: u64) -> ProgramResult {
+///     require!(ctx.accounts.data.mutation_allowed, MyError::MutationForbidden);
+///     ctx.accounts.data.data = data;
+///     Ok(())
+/// }
+///
+/// // An enum for custom error codes
 /// #[error]
-/// pub struct ErrorCode {
-///     InvalidArgument,
+/// pub enum MyError {
+///     MutationForbidden
+/// }
+///
+/// // An account definition
+/// #[account]
+/// #[derive(Default)]
+/// pub struct MyData {
+///     mutation_allowed: bool,
+///     data: u64
+/// }
+///
+/// // An account validation struct
+/// #[derive(Accounts)]
+/// pub struct SetData<'info> {
+///     #[account(mut)]
+///     pub data: Account<'info, MyData>
 /// }
 /// ```
-///
-/// One can write a `require` assertion as
-///
-/// ```ignore
-/// require!(condition, InvalidArgument);
-/// ```
-///
-/// which would exit the program with the `InvalidArgument` error code if
-/// `condition` is false.
 #[macro_export]
 macro_rules! require {
     ($invariant:expr, $error:tt $(,)?) => {

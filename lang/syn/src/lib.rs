@@ -5,6 +5,7 @@ use parser::program as program_parser;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use quote::ToTokens;
+use std::collections::HashMap;
 use std::ops::Deref;
 use syn::ext::IdentExt;
 use syn::parse::{Error as ParseError, Parse, ParseStream, Result as ParseResult};
@@ -145,6 +146,30 @@ impl AccountsStruct {
             instruction_api,
         }
     }
+
+    // Return value maps instruction name to type.
+    // E.g. if we have `#[instruction(data: u64)]` then returns
+    // { "data": "u64"}.
+    pub fn instruction_args(&self) -> Option<HashMap<String, String>> {
+        self.instruction_api.as_ref().map(|instruction_api| {
+            instruction_api
+                .iter()
+                .map(|expr| {
+                    let arg = parser::tts_to_string(&expr);
+                    let components: Vec<&str> = arg.split(" : ").collect();
+                    assert!(components.len() == 2);
+                    (components[0].to_string(), components[1].to_string())
+                })
+                .collect()
+        })
+    }
+
+    pub fn field_names(&self) -> Vec<String> {
+        self.fields
+            .iter()
+            .map(|field| field.ident().to_string())
+            .collect()
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -152,6 +177,28 @@ impl AccountsStruct {
 pub enum AccountField {
     Field(Field),
     CompositeField(CompositeField),
+}
+
+impl AccountField {
+    fn ident(&self) -> &Ident {
+        match self {
+            AccountField::Field(field) => &field.ident,
+            AccountField::CompositeField(c_field) => &c_field.ident,
+        }
+    }
+
+    pub fn ty_name(&self) -> Option<String> {
+        match self {
+            AccountField::Field(field) => match &field.ty {
+                Ty::Account(account) => Some(parser::tts_to_string(&account.account_type_path)),
+                Ty::ProgramAccount(account) => {
+                    Some(parser::tts_to_string(&account.account_type_path))
+                }
+                _ => None,
+            },
+            AccountField::CompositeField(field) => Some(field.symbol.clone()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -183,6 +230,9 @@ impl Field {
             },
             Ty::Signer => quote! {
                 Signer
+            },
+            Ty::ProgramData => quote! {
+                ProgramData
             },
             Ty::SystemAccount => quote! {
                 SystemAccount
@@ -276,28 +326,29 @@ impl Field {
     pub fn container_ty(&self) -> proc_macro2::TokenStream {
         match &self.ty {
             Ty::ProgramAccount(_) => quote! {
-                anchor_lang::ProgramAccount
+                anchor_lang::accounts::program_account::ProgramAccount
             },
             Ty::Account(_) => quote! {
-                anchor_lang::Account
+                anchor_lang::accounts::account::Account
             },
             Ty::AccountLoader(_) => quote! {
-                anchor_lang::AccountLoader
+                anchor_lang::accounts::account_loader::AccountLoader
             },
             Ty::Loader(_) => quote! {
-                anchor_lang::Loader
+                anchor_lang::accounts::loader::Loader
             },
             Ty::CpiAccount(_) => quote! {
-                anchor_lang::CpiAccount
+                anchor_lang::accounts::cpi_account::CpiAccount
             },
-            Ty::Sysvar(_) => quote! { anchor_lang::Sysvar },
-            Ty::CpiState(_) => quote! { anchor_lang::CpiState },
-            Ty::ProgramState(_) => quote! { anchor_lang::ProgramState },
-            Ty::Program(_) => quote! { anchor_lang::Program },
+            Ty::Sysvar(_) => quote! { anchor_lang::accounts::sysvar::Sysvar },
+            Ty::CpiState(_) => quote! { anchor_lang::accounts::cpi_state::CpiState },
+            Ty::ProgramState(_) => quote! { anchor_lang::accounts::state::ProgramState },
+            Ty::Program(_) => quote! { anchor_lang::accounts::program::Program },
             Ty::AccountInfo => quote! {},
             Ty::UncheckedAccount => quote! {},
             Ty::Signer => quote! {},
             Ty::SystemAccount => quote! {},
+            Ty::ProgramData => quote! {},
         }
     }
 
@@ -315,6 +366,9 @@ impl Field {
             },
             Ty::SystemAccount => quote! {
                 SystemAccount
+            },
+            Ty::ProgramData => quote! {
+                ProgramData
             },
             Ty::ProgramAccount(ty) => {
                 let ident = &ty.account_type_path;
@@ -398,13 +452,14 @@ pub enum Ty {
     CpiState(CpiStateTy),
     ProgramAccount(ProgramAccountTy),
     Loader(LoaderTy),
-    AccountLoader(LoaderAccountTy),
+    AccountLoader(AccountLoaderTy),
     CpiAccount(CpiAccountTy),
     Sysvar(SysvarTy),
     Account(AccountTy),
     Program(ProgramTy),
     Signer,
     SystemAccount,
+    ProgramData,
 }
 
 #[derive(Debug, PartialEq)]
@@ -444,7 +499,7 @@ pub struct CpiAccountTy {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct LoaderAccountTy {
+pub struct AccountLoaderTy {
     // The struct type of the account.
     pub account_type_path: TypePath,
 }
@@ -593,6 +648,7 @@ pub enum ConstraintToken {
     MintFreezeAuthority(Context<ConstraintMintFreezeAuthority>),
     MintDecimals(Context<ConstraintMintDecimals>),
     Bump(Context<ConstraintTokenBump>),
+    ProgramSeed(Context<ConstraintProgramSeed>),
 }
 
 impl Parse for ConstraintToken {
@@ -670,7 +726,8 @@ pub struct ConstraintInitGroup {
 pub struct ConstraintSeedsGroup {
     pub is_init: bool,
     pub seeds: Punctuated<Expr, Token![,]>,
-    pub bump: Option<Expr>, // None => bump was given without a target.
+    pub bump: Option<Expr>,         // None => bump was given without a target.
+    pub program_seed: Option<Expr>, // None => use the current program's program_id.
 }
 
 #[derive(Debug, Clone)]
@@ -752,6 +809,11 @@ pub struct ConstraintMintDecimals {
 #[derive(Debug, Clone)]
 pub struct ConstraintTokenBump {
     bump: Option<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstraintProgramSeed {
+    program_seed: Expr,
 }
 
 #[derive(Debug, Clone)]

@@ -1,5 +1,5 @@
-import { Idl } from "../idl.js";
-import { IdlCoder } from "./idl.js";
+import { Idl } from "../idl";
+import { IdlCoder } from "./borsh/idl";
 
 export class ConstantCoder {
   public constructor(idl: Idl) {

@@ -1,5 +1,5 @@
 import { Idl } from "../../idl.js";
-import Coder from "../../coder/index.js";
+import { Coder } from "../../coder/index.js";
 
 export default class ConstantFactory {
   public static build<IDL extends Idl>(

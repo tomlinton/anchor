@@ -202,6 +202,19 @@ export class Program<IDL extends Idl = Idl> {
   readonly simulate: SimulateNamespace<IDL>;
 
   /**
+   * A client for the program state. Similar to the base [[Program]] client,
+   * one can use this to send transactions and read accounts for the state
+   * abstraction.
+   */
+  readonly state?: StateClient<IDL>;
+
+  /**
+   * The namespace provides a builder API for all APIs on the program.
+   * This is an alternative to using namespace the other namespaces..
+   */
+  readonly methods: MethodsNamespace<IDL>;
+
+  /**
    * The namespace provides functions to decode the constants of a program.
    *
    * ```javascript
@@ -216,19 +229,6 @@ export class Program<IDL extends Idl = Idl> {
    * ```
    */
   readonly constants: ConstantNamespace;
-
-  /**
-   * A client for the program state. Similar to the base [[Program]] client,
-   * one can use this to send transactions and read accounts for the state
-   * abstraction.
-   */
-  readonly state?: StateClient<IDL>;
-
-  /**
-   * The namespace provides a builder API for all APIs on the program.
-   * This is an alternative to using namespace the other namespaces..
-   */
-  readonly methods: MethodsNamespace<IDL>;
 
   /**
    * Address of the program.

@@ -55,16 +55,14 @@ pub fn use_version(version: &Version) -> Result<()> {
                 "anchor-cli {} is not installed, would you like to install it? (y/n)",
                 version
             ))
-            .with_initial_text("y")
             .default("n".into())
             .interact_text()?;
         if matches!(input.as_str(), "y" | "yy" | "Y" | "yes" | "Yes") {
             install_version(version)?;
+            let mut current_version_file = fs::File::create(current_version_file_path().as_path())?;
+            current_version_file.write_all(version.to_string().as_bytes())?;
         }
     }
-
-    let mut current_version_file = fs::File::create(current_version_file_path().as_path())?;
-    current_version_file.write_all(version.to_string().as_bytes())?;
     Ok(())
 }
 

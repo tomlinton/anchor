@@ -1,3 +1,4 @@
+use crate::parser::docs;
 use crate::*;
 use syn::parse::{Error as ParseError, Result as ParseResult};
 use syn::punctuated::Punctuated;
@@ -120,6 +121,24 @@ fn constraints_cross_checks(fields: &[AccountField]) -> ParseResult<()> {
                     ));
                 }
             }
+            match kind {
+                // This doesn't catch cases like account.key() or account.key.
+                // My guess is that doesn't happen often and we can revisit
+                // this if I'm wrong.
+                InitKind::Token { mint, .. } | InitKind::AssociatedToken { mint, .. } => {
+                    if !fields.iter().any(|f| {
+                        f.ident()
+                            .to_string()
+                            .starts_with(&mint.to_token_stream().to_string())
+                    }) {
+                        return Err(ParseError::new(
+                            field.ident.span(),
+                            "the mint constraint has to be an account field for token initializations (not a public key)",
+                        ));
+                    }
+                }
+                _ => (),
+            }
         }
     }
     Ok(())
@@ -127,21 +146,7 @@ fn constraints_cross_checks(fields: &[AccountField]) -> ParseResult<()> {
 
 pub fn parse_account_field(f: &syn::Field, has_instruction_api: bool) -> ParseResult<AccountField> {
     let ident = f.ident.clone().unwrap();
-    let docs: String = f
-        .attrs
-        .iter()
-        .map(|a| {
-            let meta_result = a.parse_meta();
-            if let Ok(syn::Meta::NameValue(meta)) = meta_result {
-                if meta.path.is_ident("doc") {
-                    if let syn::Lit::Str(doc) = meta.lit {
-                        return format!(" {}\n", doc.value().trim());
-                    }
-                }
-            }
-            "".to_string()
-        })
-        .collect::<String>();
+    let docs = docs::parse(&f.attrs);
     let account_field = match is_field_primitive(f)? {
         true => {
             let ty = parse_ty(f)?;

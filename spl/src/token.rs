@@ -63,7 +63,7 @@ pub fn burn<'a, 'b, 'c, 'info>(
 ) -> Result<()> {
     let ix = spl_token::instruction::burn(
         &spl_token::ID,
-        ctx.accounts.to.key,
+        ctx.accounts.from.key,
         ctx.accounts.mint.key,
         ctx.accounts.authority.key,
         &[],
@@ -72,7 +72,7 @@ pub fn burn<'a, 'b, 'c, 'info>(
     solana_program::program::invoke_signed(
         &ix,
         &[
-            ctx.accounts.to.clone(),
+            ctx.accounts.from.clone(),
             ctx.accounts.mint.clone(),
             ctx.accounts.authority.clone(),
         ],
@@ -258,6 +258,14 @@ pub fn set_authority<'a, 'b, 'c, 'info>(
     .map_err(Into::into)
 }
 
+pub fn sync_native<'a, 'b, 'c, 'info>(
+    ctx: CpiContext<'a, 'b, 'c, 'info, SyncNative<'info>>,
+) -> Result<()> {
+    let ix = spl_token::instruction::sync_native(&spl_token::ID, ctx.accounts.account.key)?;
+    solana_program::program::invoke_signed(&ix, &[ctx.accounts.account.clone()], ctx.signer_seeds)
+        .map_err(Into::into)
+}
+
 #[derive(Accounts)]
 pub struct Transfer<'info> {
     pub from: AccountInfo<'info>,
@@ -275,7 +283,7 @@ pub struct MintTo<'info> {
 #[derive(Accounts)]
 pub struct Burn<'info> {
     pub mint: AccountInfo<'info>,
-    pub to: AccountInfo<'info>,
+    pub from: AccountInfo<'info>,
     pub authority: AccountInfo<'info>,
 }
 
@@ -333,7 +341,12 @@ pub struct SetAuthority<'info> {
     pub account_or_mint: AccountInfo<'info>,
 }
 
-#[derive(Clone)]
+#[derive(Accounts)]
+pub struct SyncNative<'info> {
+    pub account: AccountInfo<'info>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TokenAccount(spl_token::state::Account);
 
 impl TokenAccount {
@@ -364,7 +377,7 @@ impl Deref for TokenAccount {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Mint(spl_token::state::Mint);
 
 impl Mint {

@@ -5,12 +5,12 @@ import { DeclareId } from "../target/types/declare_id";
 import { assert } from "chai";
 
 describe("declare_id", () => {
-  anchor.setProvider(anchor.Provider.local());
+  anchor.setProvider(anchor.AnchorProvider.local());
   const program = anchor.workspace.DeclareId as Program<DeclareId>;
 
   it("throws error!", async () => {
     try {
-      await program.rpc.initialize();
+      await program.methods.initialize().rpc();
       assert.ok(false);
     } catch (_err) {
       assert.isTrue(_err instanceof AnchorError);

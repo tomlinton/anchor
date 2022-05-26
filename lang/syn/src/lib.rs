@@ -31,6 +31,7 @@ pub struct Program {
     pub state: Option<State>,
     pub ixs: Vec<Ix>,
     pub name: Ident,
+    pub docs: Option<Vec<String>>,
     pub program_mod: ItemMod,
     pub fallback_fn: Option<FallbackFn>,
 }
@@ -84,6 +85,7 @@ pub struct StateInterface {
 pub struct Ix {
     pub raw_method: ItemFn,
     pub ident: Ident,
+    pub docs: Option<Vec<String>>,
     pub args: Vec<IxArg>,
     pub returns: IxReturn,
     // The ident for the struct deriving Accounts.
@@ -93,6 +95,7 @@ pub struct Ix {
 #[derive(Debug)]
 pub struct IxArg {
     pub name: Ident,
+    pub docs: Option<Vec<String>>,
     pub raw_arg: PatType,
 }
 
@@ -213,8 +216,8 @@ pub struct Field {
     pub constraints: ConstraintGroup,
     pub instruction_constraints: ConstraintGroup,
     pub ty: Ty,
-    /// Documentation string.
-    pub docs: String,
+    /// IDL Doc comment
+    pub docs: Option<Vec<String>>,
 }
 
 impl Field {
@@ -281,51 +284,96 @@ impl Field {
 
     // TODO: remove the option once `CpiAccount` is completely removed (not
     //       just deprecated).
-    pub fn from_account_info_unchecked(&self, kind: Option<&InitKind>) -> proc_macro2::TokenStream {
+    pub fn from_account_info(
+        &self,
+        kind: Option<&InitKind>,
+        checked: bool,
+    ) -> proc_macro2::TokenStream {
         let field = &self.ident;
+        let field_str = field.to_string();
         let container_ty = self.container_ty();
+        let owner_addr = match &kind {
+            None => quote! { program_id },
+            Some(InitKind::Program { .. }) => quote! {
+                program_id
+            },
+            _ => quote! {
+                &anchor_spl::token::ID
+            },
+        };
         match &self.ty {
             Ty::AccountInfo => quote! { #field.to_account_info() },
             Ty::UncheckedAccount => {
                 quote! { UncheckedAccount::try_from(#field.to_account_info()) }
             }
             Ty::Account(AccountTy { boxed, .. }) => {
-                if *boxed {
+                let stream = if checked {
                     quote! {
-                        Box::new(#container_ty::try_from_unchecked(
+                        #container_ty::try_from(
                             &#field,
-                        )?)
+                        ).map_err(|e| e.with_account_name(#field_str))?
                     }
                 } else {
                     quote! {
                         #container_ty::try_from_unchecked(
                             &#field,
-                        )?
+                        ).map_err(|e| e.with_account_name(#field_str))?
                     }
+                };
+                if *boxed {
+                    quote! {
+                        Box::new(#stream)
+                    }
+                } else {
+                    stream
                 }
             }
             Ty::CpiAccount(_) => {
-                quote! {
-                    #container_ty::try_from_unchecked(
-                        &#field,
-                    )?
+                if checked {
+                    quote! {
+                        #container_ty::try_from(
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
+                } else {
+                    quote! {
+                        #container_ty::try_from_unchecked(
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
+                }
+            }
+            Ty::AccountLoader(_) => {
+                if checked {
+                    quote! {
+                        #container_ty::try_from(
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
+                } else {
+                    quote! {
+                        #container_ty::try_from_unchecked(
+                            #owner_addr,
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
                 }
             }
             _ => {
-                let owner_addr = match &kind {
-                    None => quote! { program_id },
-                    Some(InitKind::Program { .. }) => quote! {
-                        program_id
-                    },
-                    _ => quote! {
-                        &anchor_spl::token::ID
-                    },
-                };
-                quote! {
-                    #container_ty::try_from_unchecked(
-                        #owner_addr,
-                        &#field,
-                    )?
+                if checked {
+                    quote! {
+                        #container_ty::try_from(
+                            #owner_addr,
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
+                } else {
+                    quote! {
+                        #container_ty::try_from_unchecked(
+                            #owner_addr,
+                            &#field,
+                        ).map_err(|e| e.with_account_name(#field_str))?
+                    }
                 }
             }
         }
@@ -449,8 +497,8 @@ pub struct CompositeField {
     pub instruction_constraints: ConstraintGroup,
     pub symbol: String,
     pub raw_field: syn::Field,
-    /// Documentation string.
-    pub docs: String,
+    /// IDL Doc comment
+    pub docs: Option<Vec<String>>,
 }
 
 // A type of an account field.
@@ -587,6 +635,8 @@ pub struct ConstraintGroup {
     close: Option<ConstraintClose>,
     address: Option<ConstraintAddress>,
     associated_token: Option<ConstraintAssociatedToken>,
+    token_account: Option<ConstraintTokenAccountGroup>,
+    mint: Option<ConstraintTokenMintGroup>,
 }
 
 impl ConstraintGroup {
@@ -628,6 +678,8 @@ pub enum Constraint {
     State(ConstraintState),
     Close(ConstraintClose),
     Address(ConstraintAddress),
+    TokenAccount(ConstraintTokenAccountGroup),
+    Mint(ConstraintTokenMintGroup),
 }
 
 // Constraint token is a single keyword in a `#[account(<TOKEN>)]` attribute.
@@ -830,6 +882,19 @@ pub struct ConstraintProgramSeed {
 pub struct ConstraintAssociatedToken {
     pub wallet: Expr,
     pub mint: Expr,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstraintTokenAccountGroup {
+    pub mint: Option<Expr>,
+    pub authority: Option<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstraintTokenMintGroup {
+    pub decimals: Option<Expr>,
+    pub mint_authority: Option<Expr>,
+    pub freeze_authority: Option<Expr>,
 }
 
 // Syntaxt context object for preserving metadata about the inner item.

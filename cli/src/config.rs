@@ -102,6 +102,9 @@ impl Manifest {
                     if let Some(v) = d.version.clone() {
                         v
                     } else {
+                        // Version is not set in the detailed dependency, likely is a path based
+                        // dependency. This could be optionally resolved and the version parsed
+                        // from the Cargo.toml.
                         println!(
                             "Warning: No version selected for dependency `{}` in program {}.",
                             name, program
@@ -173,6 +176,17 @@ impl Deref for Manifest {
 }
 
 impl WithPath<Config> {
+    fn read_program_cargo_toml(&self, program: &Program) -> Result<PathBuf> {
+        let cargo_toml = program.path.join("Cargo.toml");
+        if !cargo_toml.exists() {
+            return Err(anyhow!(
+                "Did not find Cargo.toml at the path: {}",
+                program.path.display()
+            ));
+        }
+        Ok(cargo_toml)
+    }
+
     pub fn get_program_list(&self) -> Result<Vec<PathBuf>> {
         // Canonicalize the workspace filepaths to compare with relative paths.
         let (members, exclude) = self.canonicalize_workspace()?;
@@ -225,6 +239,19 @@ impl WithPath<Config> {
         Ok(r)
     }
 
+    // Iterate through all programs in the workspace and inspect the versons of the Anchor crates
+    // being used
+    pub fn check_all_crate_versions(&self) {
+        for program in self.read_all_programs().unwrap() {
+            let cargo_toml = self.read_program_cargo_toml(&program).unwrap();
+            let m = Manifest::from_path(cargo_toml).unwrap();
+            m.check_crate_version(&program.lib_name, "anchor-lang")
+                .unwrap();
+            m.check_crate_version(&program.lib_name, "anchor-spl")
+                .unwrap();
+        }
+    }
+
     pub fn canonicalize_workspace(&self) -> Result<(Vec<PathBuf>, Vec<PathBuf>)> {
         let members = self
             .workspace
@@ -261,18 +288,8 @@ impl WithPath<Config> {
 
     pub fn get_program(&self, name: &str) -> Result<Option<WithPath<Program>>> {
         for program in self.read_all_programs()? {
-            let cargo_toml = program.path.join("Cargo.toml");
-            if !cargo_toml.exists() {
-                return Err(anyhow!(
-                    "Did not find Cargo.toml at the path: {}",
-                    program.path.display()
-                ));
-            }
-
+            let cargo_toml = self.read_program_cargo_toml(&program).unwrap();
             let m = Manifest::from_path(&cargo_toml)?;
-            m.check_crate_version(name, "anchor-lang")?;
-            m.check_crate_version(name, "anchor-spl")?;
-
             if name == m.lib_name()? {
                 let path = self
                     .path()
@@ -415,7 +432,9 @@ impl Config {
                 if let Some(filename) = p.file_name() {
                     if filename.to_str() == Some("Anchor.toml") {
                         let cfg = Config::from_path(&p)?;
-                        return Ok(Some(WithPath::new(cfg, p)));
+                        let cfg_with_path = WithPath::new(cfg, p);
+                        cfg_with_path.check_all_crate_versions();
+                        return Ok(Some(cfg_with_path));
                     }
                 }
             }

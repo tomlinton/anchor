@@ -10,7 +10,6 @@
     "basic-1",
     "basic-2",
     "basic-3",
-    "basic-4"
   ],
   "dependencies": {
     "@project-serum/anchor": "file:../../ts"

@@ -508,24 +508,15 @@ fn init(cfg_override: &ConfigOverride, name: String, javascript: bool, no_git: b
         return Err(anyhow!("Workspace already initialized"));
     }
 
-    // The list is taken from https://doc.rust-lang.org/reference/keywords.html.
-    let key_words = [
-        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
-        "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
-        "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe",
-        "use", "where", "while", "async", "await", "dyn", "abstract", "become", "box", "do",
-        "final", "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try",
-        "unique",
-    ];
-
-    if key_words.contains(&name[..].into()) {
+    // Additional keywords that have not been added to the `syn` crate as reserved words
+    // https://github.com/dtolnay/syn/pull/1098
+    let extra_keywords = ["async", "await", "try"];
+    // Anchor converts to snake case before writing the program name
+    if syn::parse_str::<syn::Ident>(&name.to_snake_case()).is_err()
+        || extra_keywords.contains(&name.to_snake_case().as_str())
+    {
         return Err(anyhow!(
-            "{} is a reserved word in rust, name your project something else!",
-            name
-        ));
-    } else if name.chars().next().unwrap().is_numeric() {
-        return Err(anyhow!(
-            "Cannot start project name with numbers, name your project something else!"
+            "Anchor workspace name must be a valid Rust identifier. It may not be a Rust reserved word, start with a digit, or include certain disallowed characters. See https://doc.rust-lang.org/reference/identifiers.html for more detail.",
         ));
     }
 
@@ -1521,7 +1512,7 @@ fn extract_idl(
         cargo.version(),
         cfg.features.seeds,
         no_docs,
-        !skip_lint,
+        !(cfg.features.skip_lint || skip_lint),
     )
 }
 
@@ -2040,7 +2031,8 @@ fn run_test_suite(
             }
         }
         Err(err) => {
-            println!("Failed to run test: {:#}", err)
+            println!("Failed to run test: {:#}", err);
+            return Err(err);
         }
     }
 
@@ -2429,6 +2421,7 @@ fn deploy(
                 "Deploying program {:?}...",
                 program.path.file_name().unwrap().to_str().unwrap()
             );
+
             println!("Program path: {}...", binary_path);
 
             let program_keypair_filepath = match &program_keypair {
@@ -2445,8 +2438,8 @@ fn deploy(
                 .arg("--keypair")
                 .arg(&keypair)
                 .arg("--program-id")
-                .arg(program_keypair_filepath)
-                .arg(&binary_path)
+                .arg(strip_workspace_prefix(program_keypair_filepath))
+                .arg(strip_workspace_prefix(binary_path))
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .output()
@@ -2495,8 +2488,8 @@ fn upgrade(
             .arg("--keypair")
             .arg(&cfg.provider.wallet.to_string())
             .arg("--program-id")
-            .arg(program_id.to_string())
-            .arg(&program_filepath)
+            .arg(strip_workspace_prefix(program_id.to_string()))
+            .arg(strip_workspace_prefix(program_filepath))
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()
@@ -3174,4 +3167,83 @@ fn get_node_dns_option() -> Result<&'static str> {
         false => "",
     };
     Ok(option)
+}
+
+// Remove the current workspace directory if it prefixes a string.
+// This is used as a workaround for the Solana CLI using the uriparse crate to
+// parse args but not handling percent encoding/decoding when using the path as
+// a local filesystem path. Removing the workspace prefix handles most/all cases
+// of spaces in keypair/binary paths, but this should be fixed in the Solana CLI
+// and removed here.
+fn strip_workspace_prefix(absolute_path: String) -> String {
+    let workspace_prefix = std::env::current_dir().unwrap().display().to_string() + "/";
+    absolute_path
+        .strip_prefix(&workspace_prefix)
+        .unwrap_or(&absolute_path)
+        .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Anchor workspace name must be a valid Rust identifier.")]
+    fn test_init_reserved_word() {
+        init(
+            &ConfigOverride {
+                cluster: None,
+                wallet: None,
+            },
+            "await".to_string(),
+            true,
+            false,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Anchor workspace name must be a valid Rust identifier.")]
+    fn test_init_reserved_word_from_syn() {
+        init(
+            &ConfigOverride {
+                cluster: None,
+                wallet: None,
+            },
+            "fn".to_string(),
+            true,
+            false,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Anchor workspace name must be a valid Rust identifier.")]
+    fn test_init_invalid_ident_chars() {
+        init(
+            &ConfigOverride {
+                cluster: None,
+                wallet: None,
+            },
+            "project.name".to_string(),
+            true,
+            false,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Anchor workspace name must be a valid Rust identifier.")]
+    fn test_init_starting_with_digit() {
+        init(
+            &ConfigOverride {
+                cluster: None,
+                wallet: None,
+            },
+            "1project".to_string(),
+            true,
+            false,
+        )
+        .unwrap();
+    }
 }
